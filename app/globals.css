@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  background: #0A0F1C;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- Glass ---------- */
+.glass {
+  background: linear-gradient(160deg, rgba(255,255,255,0.10), rgba(255,255,255,0.04));
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: 0 8px 32px rgba(3,8,20,0.45), inset 0 1px 0 rgba(255,255,255,0.14);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+}
+.glass-strong {
+  background: linear-gradient(160deg, rgba(20,28,48,0.82), rgba(12,17,32,0.88));
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 -12px 48px rgba(3,8,20,0.6), inset 0 1px 0 rgba(255,255,255,0.16);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+}
+.glass-pill {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.10);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.glass-pill[data-on="true"] {
+  background: rgba(245,185,66,0.18);
+  border-color: rgba(245,185,66,0.55);
+  color: #FFE1A0;
+}
+
+/* ---------- Aurora background ---------- */
+.aurora { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.aurora::after {
+  content: ""; position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity: 0.06; mix-blend-mode: overlay;
+}
+.blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.55; will-change: transform; }
+.blob-1 { width: 60vmax; height: 60vmax; left: -20vmax; top: -18vmax; background: #1B5E9E; animation: drift1 26s ease-in-out infinite alternate; }
+.blob-2 { width: 55vmax; height: 55vmax; right: -22vmax; top: 22vh;  background: #10786A; animation: drift2 32s ease-in-out infinite alternate; }
+.blob-3 { width: 40vmax; height: 40vmax; left: 10vw; bottom: -20vmax; background: #6B3FA0; animation: drift3 38s ease-in-out infinite alternate; }
+.blob-4 { width: 26vmax; height: 26vmax; right: 8vw; bottom: 18vh; background: #F5B942; opacity: 0.16; animation: drift1 22s ease-in-out infinite alternate-reverse; }
+@keyframes drift1 { to { transform: translate(14vw, 10vh) scale(1.12); } }
+@keyframes drift2 { to { transform: translate(-16vw, -8vh) scale(0.92); } }
+@keyframes drift3 { to { transform: translate(10vw, -12vh) scale(1.08); } }
+
+/* ---------- Inputs ---------- */
+input, textarea { background: transparent; outline: none; }
+input::placeholder, textarea::placeholder { color: rgba(255,255,255,0.35); }
+input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+:focus-visible { outline: 2px solid rgba(245,185,66,0.8); outline-offset: 2px; border-radius: 12px; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  .blob { animation: none !important; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+/* ---------- Tide (hero wave) ---------- */
+.tide { animation: tide 9s linear infinite; will-change: transform; }
+.tide-slow { animation-duration: 14s; animation-direction: reverse; }
+@keyframes tide { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* ---------- Location chip ---------- */
+.locating::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: #F5B942; margin-right: 6px; animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
