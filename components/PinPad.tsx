@@ -59,7 +59,7 @@ export default function PinPad({ onComplete, disabled, label }: Props) {
           k === "" ? <span key={i} /> : (
             <motion.button
               key={k} type="button" onClick={() => press(k)} whileTap={{ scale: 0.88, backgroundColor: "rgba(255,255,255,0.22)" }}
-              className={`glass aspect-[1.35] rounded-[22px] font-display text-[26px] font-semibold ${k === "⌫" ? "text-[20px] text-white/70" : ""}`}
+              className={`card aspect-[1.35] rounded-[22px] font-display text-[26px] font-semibold ${k === "⌫" ? "text-[20px] text-white/70" : ""}`}
               aria-label={k === "⌫" ? "Delete" : k}
             >{k}</motion.button>
           )

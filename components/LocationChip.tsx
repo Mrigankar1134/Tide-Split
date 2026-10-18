@@ -20,7 +20,7 @@ export default function LocationChip({ geo, state, onClear }: { geo: Geo | null;
   if (state === "idle") return null;
   const label = state === "locating" ? "Finding where you are…" : geo ? (geo.place ?? `${geo.lat}, ${geo.lng}`) : "Location off — saving without it";
   return (
-    <div className={`glass-pill flex items-center gap-2 rounded-full px-3 py-1.5 text-[12.5px] text-white/75 ${state === "locating" ? "locating" : ""}`}>
+    <div className={`pill flex items-center gap-2 rounded-full px-3 py-1.5 text-[12.5px] text-white/75 ${state === "locating" ? "locating" : ""}`}>
       {state !== "locating" && <span>{geo ? "📍" : "🚫"}</span>}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {geo && <button type="button" onClick={onClear} className="text-white/45" aria-label="Don't save location">✕</button>}
