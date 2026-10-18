@@ -8,20 +8,10 @@ import type { Toast } from "./Dashboard";
 import Sheet from "./Sheet";
 import Avatar from "./Avatar";
 import LocationChip, { useLocationCapture } from "./LocationChip";
+import { Segmented } from "./ui";
 
 type SplitMode = "equal" | "amount" | "percent";
 type Props = { me: string; open: boolean; onClose: () => void; onSaved: () => void; notify: (t: Toast) => void };
-
-const Seg = ({ value, options, onChange }: { value: string; options: { id: string; label: string }[]; onChange: (v: any) => void }) => (
-  <div className="glass-pill grid rounded-full p-1" style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>
-    {options.map((o) => (
-      <button key={o.id} type="button" onClick={() => onChange(o.id)} className="relative rounded-full py-2 text-[13px] font-medium" aria-pressed={value === o.id}>
-        {value === o.id && <motion.span layoutId={"seg-" + options.map((x) => x.id).join()} className="absolute inset-0 rounded-full bg-white/15" transition={{ type: "spring", stiffness: 420, damping: 36 }} />}
-        <span className={`relative ${value === o.id ? "text-white" : "text-white/55"}`}>{o.label}</span>
-      </button>
-    ))}
-  </div>
-);
 
 const PersonChip = ({ id, on, onClick }: { id: string; on: boolean; onClick: () => void }) => (
   <motion.button type="button" onClick={onClick} whileTap={{ scale: 0.92 }} aria-pressed={on} className="flex shrink-0 flex-col items-center gap-1.5">
@@ -34,9 +24,9 @@ const AmountRow = ({ id, value, onChange, suffix = "₹", hint }: { id: string; 
   <label className="flex items-center gap-3 py-2">
     <Avatar id={id} size={34} />
     <span className="flex-1 text-[14px]">{person(id).short}{hint && <span className="ml-1.5 text-[12px] text-white/45">{hint}</span>}</span>
-    <span className="glass-pill flex items-center gap-1 rounded-xl px-3 py-1.5">
+    <span className="pill flex items-center gap-1 rounded-xl px-3 py-1.5">
       {suffix === "₹" && <span className="text-white/50">₹</span>}
-      <input inputMode="decimal" type="number" step="0.01" min="0" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" className="tabular w-[76px] text-right text-[15px]" />
+      <input inputMode="decimal" type="number" step="0.01" min="0" value={value} onChange={(e) => onChange(e.target.value)} placeholder="0" className="money w-[76px] text-right text-[15px]" />
       {suffix === "%" && <span className="text-white/50">%</span>}
     </span>
   </label>
@@ -127,35 +117,35 @@ export default function AddExpense({ me, open, onClose, onSaved, notify }: Props
   const perHead = inSplit.length ? total / inSplit.length : 0;
 
   return (
-    <Sheet open={open} onClose={onClose} title="Add expense">
+    <Sheet open={open} onClose={onClose} title="New expense">
       <div className="space-y-5 pt-2">
         {/* Amount + description */}
-        <div className="glass rounded-[22px] px-4 py-3">
+        <div className="card rounded-row px-4 py-3">
           <div className="flex items-baseline gap-1">
             <span className="font-display text-3xl text-white/50">₹</span>
-            <input ref={amountRef} inputMode="decimal" type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className="tabular w-full font-display text-[40px] font-bold leading-none" />
+            <input ref={amountRef} inputMode="decimal" type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" className="money w-full font-display text-[44px] font-bold leading-none" />
           </div>
           <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was it for?" className="mt-2 w-full border-t border-white/10 pt-3 text-[16px]" />
         </div>
 
         <div className="no-scrollbar -mx-5 flex gap-2 overflow-x-auto px-5">
           {CATEGORIES.map((c) => (
-            <button key={c.id} type="button" data-on={category === c.id} onClick={() => setCategory(c.id)} className="glass-pill shrink-0 rounded-full px-3.5 py-2 text-[13px]">{c.glyph} {c.label}</button>
+            <button key={c.id} type="button" data-on={category === c.id} onClick={() => setCategory(c.id)} className="pill shrink-0 rounded-full px-3.5 py-2 text-[13px]">{c.glyph} {c.label}</button>
           ))}
         </div>
 
         {/* Paid by */}
         <section>
           <div className="mb-2.5 flex items-center justify-between">
-            <h3 className="text-[14px] font-medium">Paid by</h3>
-            <Seg value={payMode} onChange={setPayMode} options={[{ id: "one", label: "One person" }, { id: "many", label: "Several" }]} />
+            <h3 className="font-display text-[15px] font-semibold tracking-tight text-white/85">Paid by</h3>
+            <Segmented<"one" | "many"> size="sm" layoutKey="pay" value={payMode} onChange={setPayMode} options={[{ id: "one", label: "One person" }, { id: "many", label: "Several" }]} />
           </div>
           {payMode === "one" ? (
             <div className="no-scrollbar -mx-5 flex gap-3.5 overflow-x-auto px-5 py-1">
               {PEOPLE.map((p) => <PersonChip key={p.id} id={p.id} on={payer === p.id} onClick={() => setPayer(p.id)} />)}
             </div>
           ) : (
-            <div className="glass divide-y divide-white/10 rounded-2xl px-4">
+            <div className="card divide-y divide-white/10 rounded-row px-4">
               {PEOPLE.map((p) => <AmountRow key={p.id} id={p.id} value={payMany[p.id] ?? ""} onChange={(v) => setPayMany((m) => ({ ...m, [p.id]: v }))} />)}
               <p className={`py-2.5 text-right text-[12px] ${Math.abs(paidSum - total) < 0.011 ? "text-mint" : "text-white/55"}`}>{inr(paidSum)} of {inr(total)}</p>
             </div>
@@ -165,8 +155,8 @@ export default function AddExpense({ me, open, onClose, onSaved, notify }: Props
         {/* Split */}
         <section>
           <div className="mb-2.5 flex items-center justify-between">
-            <h3 className="text-[14px] font-medium">Split</h3>
-            <Seg value={splitMode} onChange={setSplitMode} options={[{ id: "equal", label: "Equally" }, { id: "amount", label: "Amounts" }, { id: "percent", label: "Percent" }]} />
+            <h3 className="font-display text-[15px] font-semibold tracking-tight text-white/85">Split</h3>
+            <Segmented<SplitMode> size="sm" layoutKey="split" value={splitMode} onChange={setSplitMode} options={[{ id: "equal", label: "Equally" }, { id: "amount", label: "Amounts" }, { id: "percent", label: "Percent" }]} />
           </div>
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={splitMode} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
@@ -177,18 +167,18 @@ export default function AddExpense({ me, open, onClose, onSaved, notify }: Props
                   </div>
                   <div className="mt-2 flex items-center justify-between text-[12.5px] text-white/55">
                     <button type="button" className="underline-offset-2 hover:underline" onClick={() => setInSplit(inSplit.length === PEOPLE.length ? [] : PEOPLE.map((p) => p.id))}>{inSplit.length === PEOPLE.length ? "Clear all" : "Select all"}</button>
-                    <span>{inSplit.length} people · <b className="tabular text-white/80">{inr(perHead)}</b> each</span>
+                    <span>{inSplit.length} people · <b className="money text-white/80">{inr(perHead)}</b> each</span>
                   </div>
                 </>
               )}
               {splitMode === "amount" && (
-                <div className="glass divide-y divide-white/10 rounded-2xl px-4">
+                <div className="card divide-y divide-white/10 rounded-row px-4">
                   {PEOPLE.map((p) => <AmountRow key={p.id} id={p.id} value={splitAmt[p.id] ?? ""} onChange={(v) => setSplitAmt((m) => ({ ...m, [p.id]: v }))} />)}
                   <p className={`py-2.5 text-right text-[12px] ${Math.abs(shareSum - total) < 0.011 ? "text-mint" : "text-white/55"}`}>{inr(shareSum)} of {inr(total)}</p>
                 </div>
               )}
               {splitMode === "percent" && (
-                <div className="glass divide-y divide-white/10 rounded-2xl px-4">
+                <div className="card divide-y divide-white/10 rounded-row px-4">
                   {PEOPLE.map((p) => <AmountRow key={p.id} id={p.id} suffix="%" value={splitPct[p.id] ?? ""} onChange={(v) => setSplitPct((m) => ({ ...m, [p.id]: v }))} hint={splitPct[p.id] ? inr(total * (Number(splitPct[p.id]) || 0) / 100) : undefined} />)}
                   <p className={`py-2.5 text-right text-[12px] ${Math.abs(pctSum - 100) < 0.011 ? "text-mint" : "text-white/55"}`}>{pctSum}% of 100%</p>
                 </div>
@@ -199,24 +189,24 @@ export default function AddExpense({ me, open, onClose, onSaved, notify }: Props
 
         {/* Receipt */}
         <section>
-          <h3 className="mb-2.5 text-[14px] font-medium">Bill or receipt</h3>
+          <h3 className="mb-2.5 font-display text-[15px] font-semibold tracking-tight text-white/85">Bill or receipt</h3>
           {receipt ? (
-            <div className="glass flex items-center gap-3 rounded-2xl p-3">
+            <div className="card flex items-center gap-3 rounded-row p-3">
               {receipt.preview ? <img src={receipt.preview} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <div className="grid h-12 w-12 place-items-center rounded-xl bg-white/10 text-xl">📄</div>}
               <p className="min-w-0 flex-1 truncate text-[14px]">{receipt.name}</p>
               <button type="button" onClick={() => setReceipt(null)} className="text-[13px] text-white/60">Remove</button>
             </div>
           ) : (
-            <label className={`glass flex cursor-pointer items-center justify-center gap-2 rounded-2xl border-dashed py-4 text-[14px] ${uploading ? "opacity-60" : ""}`}>
+            <label className={`card flex cursor-pointer items-center justify-center gap-2 rounded-row border-dashed py-4 text-[14px] ${uploading ? "opacity-60" : ""}`}>
               <input type="file" accept="image/*,application/pdf" className="hidden" disabled={uploading} onChange={(e) => pickFile(e.target.files?.[0] ?? null)} />
-              {uploading ? "Uploading…" : "📷 Snap or attach a bill"}
+              {uploading ? "Uploading…" : "Attach a photo or PDF of the bill"}
             </label>
           )}
         </section>
 
         <LocationChip geo={loc.geo} state={loc.state} onClear={loc.clear} />
 
-        <button type="button" disabled={!!problem || busy || uploading} onClick={save} className="w-full rounded-full bg-amber py-4 font-display text-[16px] font-semibold text-[#1A1200] shadow-glow transition disabled:bg-white/10 disabled:text-white/50 disabled:shadow-none">
+        <button type="button" disabled={!!problem || busy || uploading} onClick={save} className="btn-primary w-full rounded-full py-4 font-display text-[16px] font-semibold">
           {busy ? "Saving…" : problem ?? `Save ${inr(total)}`}
         </button>
       </div>

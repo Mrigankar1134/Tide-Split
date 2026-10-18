@@ -33,14 +33,14 @@ export default function Onboarding({ onLogin }: { onLogin: (id: string) => void 
         {!picked ? (
           <motion.div key="pick" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.3 }}>
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-              <p className="font-display text-sm text-white/55">Tide Split</p>
-              <h1 className="mt-2 font-display text-[40px] font-bold leading-[1.05] tracking-tight">Who are you?</h1>
+              <p className="font-display text-[14px] font-semibold text-tide/80">Tide Split</p>
+              <h1 className="mt-2 font-display text-[42px] font-extrabold leading-[1.02] tracking-tight">Who are you?</h1>
               <p className="mt-3 max-w-[30ch] text-[15px] text-white/60">Tap your name, then enter your 4-digit PIN.</p>
             </motion.div>
             <motion.ul className="mt-8 grid grid-cols-3 gap-3" initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.05, delayChildren: 0.2 } } }}>
               {PEOPLE.map((p) => (
                 <motion.li key={p.id} variants={{ hidden: { opacity: 0, y: 18, scale: 0.94 }, show: { opacity: 1, y: 0, scale: 1 } }} transition={{ type: "spring", stiffness: 320, damping: 26 }}>
-                  <motion.button type="button" onClick={() => setPicked(p.id)} whileTap={{ scale: 0.94 }} className="glass flex aspect-[0.9] w-full flex-col items-center justify-center gap-2.5 rounded-[22px] px-2">
+                  <motion.button type="button" onClick={() => setPicked(p.id)} whileTap={{ scale: 0.94 }} className="card flex aspect-[0.9] w-full flex-col items-center justify-center gap-2.5 rounded-[22px] px-2">
                     <Avatar id={p.id} size={48} />
                     <span className="text-center text-[13px] leading-tight text-white/80">{p.short}</span>
                   </motion.button>
