@@ -71,3 +71,6 @@ create table if not exists plan_rules (
   created_at timestamptz not null default now(),
   unique (from_person, to_person)
 );
+
+-- One-time seeds applied by the app (lib/rules.ts). Default rule: Kunal is not routed to Mrigankar.
+create table if not exists app_seeds (key text primary key, applied_at timestamptz not null default now());
