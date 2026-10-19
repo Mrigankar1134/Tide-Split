@@ -151,6 +151,35 @@ function chainAvoiding(group: Entry[], avoid: AvoidSet): Transfer[] {
   return out;
 }
 
+/**
+ * An unfinished part payment: `from` meant to clear `planned` to `to`, has paid `paid` so far,
+ * and `remaining` is still expected between the same two people.
+ */
+export type Pin = { from: string; to: string; planned: number; paid: number; remaining: number };
+
+/**
+ * Open part payments, per pair, in ledger order: a payment recorded against a plan amount opens
+ * (or replaces) that pair's expectation; later payments between the same two people pay it down.
+ */
+export function pendingPins(settlements: Settlement[]): Pin[] {
+  const byPair = new Map<string, Pin>();
+  const sorted = [...settlements].sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
+  for (const s of sorted) {
+    const key = `${s.from_person}|${s.to_person}`;
+    if (s.planned != null && s.planned > s.amount + EPS) {
+      byPair.set(key, { from: s.from_person, to: s.to_person, planned: s.planned, paid: s.amount, remaining: round2(s.planned - s.amount) });
+    } else {
+      const open = byPair.get(key);
+      if (open) {
+        open.paid = round2(open.paid + s.amount);
+        open.remaining = round2(Math.max(0, open.remaining - s.amount));
+        if (open.remaining <= EPS) byPair.delete(key);
+      }
+    }
+  }
+  return [...byPair.values()];
+}
+
 export type FewestResult = {
   transfers: Transfer[];
   /** Fewest transfers possible with no preferences at all. */
@@ -162,6 +191,8 @@ export type FewestResult = {
    * everyone else is owed combined. Everything else is routed around the rule. Empty when honoured.
    */
   forced: Transfer[];
+  /** Transfers kept between the same two people because of an unfinished part payment. */
+  pinned: Transfer[];
 };
 
 /**
@@ -228,26 +259,42 @@ function forceMinimum(entries: Entry[], avoid: AvoidSet): { rest: Entry[]; force
  * some pairings. Minimum = (people with a non-zero balance) − (max number of disjoint zero-sum groups),
  * where a group only counts if it can be settled with allowed pairings.
  */
-export function fewestTransfersWith(net: Record<string, number>, avoid: AvoidSet = new Set()): FewestResult {
-  const entries: Entry[] = Object.entries(net).filter(([, v]) => Math.abs(v) > EPS).map(([id, v]) => ({ id, paise: Math.round(v * 100) }));
-  const n = entries.length;
+export function fewestTransfersWith(net: Record<string, number>, avoid: AvoidSet = new Set(), pins: Pin[] = []): FewestResult {
+  const all: Entry[] = Object.entries(net).filter(([, v]) => Math.abs(v) > EPS).map(([id, v]) => ({ id, paise: Math.round(v * 100) }));
   const byAmount = (a: Transfer, b: Transfer) => b.amount - a.amount;
-  if (n === 0) return { transfers: [], minimum: 0, honored: true, forced: [] };
-  if (n > 14) { const t = chain(entries); return { transfers: t, minimum: t.length, honored: avoid.size === 0, forced: [] }; }
+  const empty = { minimum: 0, honored: true, forced: [] as Transfer[], pinned: [] as Transfer[] };
+  if (all.length === 0) return { transfers: [], ...empty };
+  if (all.length > 14) { const t = chain(all); return { transfers: t, ...empty, minimum: t.length, honored: avoid.size === 0 }; }
 
-  const free = partition(entries, new Set()) ?? [entries]; // the full set is zero-sum, so always solvable
-  const minimum = n - free.length;
-  const freePlan = free.flatMap(chain).sort(byAmount);
-  if (avoid.size === 0) return { transfers: freePlan, minimum, honored: true, forced: [] };
+  // Unconstrained minimum, for reporting.
+  const free = partition(all, new Set()) ?? [all];
+  const minimum = all.length - free.length;
+
+  // Pins first: keep an unfinished part payment between the same two people, as far as balances allow.
+  const work = all.map((e) => ({ ...e }));
+  const byId = new Map(work.map((e) => [e.id, e]));
+  const pinned: Transfer[] = [];
+  for (const p of pins) {
+    const d = byId.get(p.from), c = byId.get(p.to);
+    if (!d || !c || d.paise >= 0 || c.paise <= 0) continue;
+    const amt = Math.min(Math.round(p.remaining * 100), -d.paise, c.paise);
+    if (amt <= 0) continue;
+    pinned.push({ from: p.from, to: p.to, amount: amt / 100 });
+    d.paise += amt; c.paise -= amt;
+  }
+  const entries = work.filter((e) => e.paise !== 0);
+  const done = (rest: Transfer[], honored: boolean, forced: Transfer[]) => ({ transfers: [...pinned, ...rest].sort(byAmount), minimum, honored, forced, pinned });
+
+  if (avoid.size === 0) return done((partition(entries, new Set()) ?? [entries]).flatMap(chain), true, []);
 
   const constrained = partition(entries, avoid);
-  if (constrained) return { transfers: constrained.flatMap((g) => chainAvoiding(g, avoid)).sort(byAmount), minimum, honored: true, forced: [] };
+  if (constrained) return done(constrained.flatMap((g) => chainAvoiding(g, avoid)), true, []);
 
   // Partially honour: push as much as possible around the rules, force only the remainder.
   const { rest, forced } = forceMinimum(entries, avoid);
   const after = partition(rest, avoid);
-  if (!after) return { transfers: freePlan, minimum, honored: false, forced: [] }; // should not happen; stay safe
-  return { transfers: [...forced, ...after.flatMap((g) => chainAvoiding(g, avoid))].sort(byAmount), minimum, honored: false, forced };
+  if (!after) return done((partition(entries, new Set()) ?? [entries]).flatMap(chain), false, []); // should not happen; stay safe
+  return done([...forced, ...after.flatMap((g) => chainAvoiding(g, avoid))], false, forced);
 }
 
 export const fewestTransfers = (net: Record<string, number>): Transfer[] => fewestTransfersWith(net).transfers;
@@ -282,14 +329,17 @@ export type Plan = {
   minimum?: number;
   honored?: boolean;
   forced?: Transfer[];
+  /** Fewest plan only: unfinished part payments, so rows can show progress. */
+  pins?: Pin[];
 };
 
 /** Both settlement plans side by side, so the UI can show what the fewest-transfers plan saves. */
 export function settlementPlans(ids: string[], expenses: Expense[], settlements: Settlement[], avoid: AvoidSet = new Set()): Record<PlanId, Plan> {
   const net = netBalances(expenses, settlements);
   const mk = (id: PlanId, transfers: Transfer[]): Plan => ({ id, transfers, count: transfers.length, volume: round2(transfers.reduce((s, t) => s + t.amount, 0)) });
-  const f = fewestTransfersWith(net, avoid);
-  return { fewest: { ...mk("fewest", f.transfers), minimum: f.minimum, honored: f.honored, forced: f.forced }, direct: mk("direct", directTransfers(ids, expenses, settlements)) };
+  const pins = pendingPins(settlements);
+  const f = fewestTransfersWith(net, avoid, pins);
+  return { fewest: { ...mk("fewest", f.transfers), minimum: f.minimum, honored: f.honored, forced: f.forced, pins }, direct: mk("direct", directTransfers(ids, expenses, settlements)) };
 }
 
 /** Exact pairwise ledger for `me`: what each person owes me (+) or I owe them (−). */

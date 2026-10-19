@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { person } from "@/lib/people";
-import { inr, type Plan, type PlanId, type Transfer } from "@/lib/split";
+import { inr, type Pin, type Plan, type PlanId, type Transfer } from "@/lib/split";
 import Avatar from "./Avatar";
 import { Empty, Segmented, SectionTitle, Skeleton } from "./ui";
 
@@ -24,8 +24,9 @@ const Pair = ({ from, to, size = 34 }: { from: string; to: string; size?: number
   </div>
 );
 
-function TransferRow({ t, me, index, onRecord }: { t: Transfer; me: string; index: number; onRecord?: (t: PaymentTarget) => void }) {
+function TransferRow({ t, me, index, onRecord, pin }: { t: Transfer; me: string; index: number; onRecord?: (t: PaymentTarget) => void; pin?: Pin }) {
   const iPay = t.from === me, iGet = t.to === me, mine = iPay || iGet;
+  const pct = pin ? Math.min(100, Math.round((pin.paid / pin.planned) * 100)) : 0;
   return (
     <motion.li
       layout
@@ -42,6 +43,12 @@ function TransferRow({ t, me, index, onRecord }: { t: Transfer; me: string; inde
         </p>
         <span className={`money shrink-0 text-[16px] font-semibold ${iPay ? "text-coral" : iGet ? "text-mint" : "text-white/85"}`}>{inr(t.amount)}</span>
       </div>
+      {pin && (
+        <div className="mt-2 pl-[52px]">
+          <div className="h-1 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-tide/80" style={{ width: `${pct}%` }} /></div>
+          <p className="mt-1 text-[12px] text-white/50"><span className="money">{inr(pin.paid)}</span> of <span className="money">{inr(pin.planned)}</span> paid so far</p>
+        </div>
+      )}
       {mine && onRecord && (
         <div className="mt-2.5 flex gap-2 pl-[52px]">
           <button onClick={() => onRecord(t)} className="btn-ghost whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-medium text-tide">
@@ -62,6 +69,8 @@ export default function SettlePlan({ me, plans, loading, onRecord }: Props) {
   const fewest = plans.fewest, direct = plans.direct;
   const saved = direct.count - fewest.count;
   const extra = fewest.count - (fewest.minimum ?? fewest.count);
+  const pins = planId === "fewest" ? (fewest.pins ?? []) : [];
+  const pinFor = (t: Transfer) => pins.find((p) => p.from === t.from && p.to === t.to);
   const mine = plan.transfers.filter((t) => t.from === me || t.to === me);
   const others = plan.transfers.filter((t) => t.from !== me && t.to !== me);
   const iPayTotal = mine.filter((t) => t.from === me).reduce((s, t) => s + t.amount, 0);
@@ -132,7 +141,7 @@ export default function SettlePlan({ me, plans, loading, onRecord }: Props) {
           <motion.ul layout className="card divide-y divide-white/[0.07] overflow-hidden rounded-card">
             <AnimatePresence initial={false}>
               {mine.map((t, i) => (
-                <TransferRow key={`${planId}-${t.from}-${t.to}`} t={t} me={me} index={i} onRecord={onRecord} />
+                <TransferRow key={`${planId}-${t.from}-${t.to}`} t={t} me={me} index={i} onRecord={onRecord} pin={pinFor(t)} />
               ))}
             </AnimatePresence>
           </motion.ul>
@@ -145,7 +154,7 @@ export default function SettlePlan({ me, plans, loading, onRecord }: Props) {
           <SectionTitle aside={plural(others.length, "payment")}>Everyone else</SectionTitle>
           <motion.ul layout className="card-flat divide-y divide-white/[0.06] overflow-hidden rounded-card">
             <AnimatePresence initial={false}>
-              {others.map((t, i) => <TransferRow key={`${planId}-${t.from}-${t.to}`} t={t} me={me} index={i + mine.length} />)}
+              {others.map((t, i) => <TransferRow key={`${planId}-${t.from}-${t.to}`} t={t} me={me} index={i + mine.length} pin={pinFor(t)} />)}
             </AnimatePresence>
           </motion.ul>
         </section>

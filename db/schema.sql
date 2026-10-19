@@ -48,6 +48,7 @@ alter table expenses add column if not exists place text;
 alter table settlements add column if not exists lat double precision;
 alter table settlements add column if not exists lng double precision;
 alter table settlements add column if not exists place text;
+alter table settlements add column if not exists planned numeric(12,2); -- amount the payer meant to clear (partial payments)
 
 insert into pins (person_id, pin_hash) values
   ('rahul', '46c9610df11cb9febc3744bcf68feaf604ab4746944cbe1fb5dca37a36eda7e4'),

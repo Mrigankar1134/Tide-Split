@@ -90,7 +90,7 @@ export default function Activity({ me, ledger, onChanged, notify }: { me: string
                           <span className="text-white/50"> paid </span>
                           <span className={mine ? "font-semibold" : "font-medium"}>{s.to_person === me ? "you" : person(s.to_person).short}</span>
                         </p>
-                        <p className="truncate text-[12.5px] text-white/50">{[timeLabel(s.created_at), s.note, s.place].filter(Boolean).join(" — ")}</p>
+                        <p className="truncate text-[12.5px] text-white/50">{[timeLabel(s.created_at), s.planned != null && s.planned > s.amount + 0.004 ? `part of ${inr(s.planned)}` : null, s.note, s.place].filter(Boolean).join(" — ")}</p>
                       </div>
                       <span className="money text-[15px] font-semibold text-tide">{inr(s.amount)}</span>
                     </button>

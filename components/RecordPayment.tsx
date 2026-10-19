@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { person } from "@/lib/people";
-import { inr } from "@/lib/split";
+import { inr, round2 } from "@/lib/split";
 import type { Toast } from "./Dashboard";
 import type { PaymentTarget } from "./SettlePlan";
 import Sheet from "./Sheet";
@@ -26,13 +26,23 @@ export default function RecordPayment({ me, target, onClose, onSaved, notify }: 
 
   useEffect(() => { if (target) { setAmount(String(target.amount)); setNote(""); } }, [target]);
 
+  const planned = target?.amount ?? 0;
+  const n = round2(Number(amount) || 0);
+  const partial = n > 0 && n < planned - 0.004;
+  const remaining = round2(planned - n);
+  const over = n > planned + 0.004;
+
   const save = async () => {
     if (!target) return;
     setBusy(true);
     try {
       const r = await fetch("/api/settlements", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_person: target.from, to_person: target.to, amount: Number(amount), note: note || null, lat: loc.geo?.lat ?? null, lng: loc.geo?.lng ?? null, place: loc.geo?.place ?? null }),
+        body: JSON.stringify({
+          from_person: target.from, to_person: target.to, amount: n, note: note || null,
+          planned: partial ? planned : null,
+          lat: loc.geo?.lat ?? null, lng: loc.geo?.lng ?? null, place: loc.geo?.place ?? null,
+        }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error);
@@ -41,7 +51,7 @@ export default function RecordPayment({ me, target, onClose, onSaved, notify }: 
     finally { setBusy(false); }
   };
 
-  const n = Number(amount) || 0;
+  const preset = (v: number) => setAmount(String(round2(v)));
 
   return (
     <Sheet open={!!target} onClose={onClose} title={iPay ? `Pay ${person(other).short}` : `Received from ${person(other).short}`}>
@@ -62,17 +72,35 @@ export default function RecordPayment({ me, target, onClose, onSaved, notify }: 
           </div>
 
           <label className="card block rounded-row px-4 py-3">
-            <span className="text-[12.5px] text-white/55">Amount</span>
+            <span className="flex items-baseline justify-between text-[12.5px] text-white/55">
+              <span>Amount {iPay ? "paid" : "received"}</span>
+              <span>of <span className="money">{inr(planned)}</span> due</span>
+            </span>
             <div className="flex items-baseline gap-1.5">
               <span className="font-display text-2xl text-white/50">₹</span>
               <input inputMode="decimal" type="number" step="0.01" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="money w-full font-display text-[32px] font-semibold" />
             </div>
-            {Math.abs(n - target.amount) > 0.005 && n > 0 && (
-              <p className="mt-1 text-[12.5px] text-white/50">
-                Plan suggests {inr(target.amount)}. <button type="button" className="text-tide" onClick={() => setAmount(String(target.amount))}>Use that</button>
-              </p>
-            )}
+            <div className="mt-2 flex gap-2">
+              {[{ l: "Full", v: planned }, { l: "Half", v: planned / 2 }, { l: "Quarter", v: planned / 4 }].map((p) => (
+                <button key={p.l} type="button" onClick={() => preset(p.v)} aria-pressed={Math.abs(n - round2(p.v)) < 0.005}
+                  className="pill rounded-full px-3 py-1 text-[12.5px] text-white/75 aria-pressed:border-tide/60 aria-pressed:text-white">
+                  {p.l}
+                </button>
+              ))}
+            </div>
           </label>
+
+          {partial && (
+            <div className="rounded-row border border-amber/30 bg-amber/10 px-4 py-3 text-[13.5px] leading-snug">
+              <p className="font-medium text-amber">Part payment</p>
+              <p className="mt-0.5 text-white/75">
+                <span className="money font-semibold text-white">{inr(remaining)}</span> stays due {iPay ? `to ${person(other).short} from you` : `from ${person(other).short} to you`}, and the plan keeps it between the two of you until it's cleared.
+              </p>
+            </div>
+          )}
+          {over && (
+            <p className="px-1 text-[13px] text-white/55">That's {inr(round2(n - planned))} more than due — fine if it covers something else; balances will reflect it.</p>
+          )}
 
           <label className="card block rounded-row px-4 py-3">
             <span className="text-[12.5px] text-white/55">Note</span>
@@ -82,7 +110,7 @@ export default function RecordPayment({ me, target, onClose, onSaved, notify }: 
           <LocationChip geo={loc.geo} state={loc.state} onClear={loc.clear} />
 
           <button disabled={busy || !(n > 0)} onClick={save} className="btn-primary w-full rounded-full py-4 font-display text-[16px] font-semibold">
-            {busy ? "Recording…" : iPay ? `Record ${inr(n)} paid` : `Record ${inr(n)} received`}
+            {busy ? "Recording…" : `Record ${inr(n)} ${iPay ? "paid" : "received"}${partial ? ` · ${inr(remaining)} left` : ""}`}
           </button>
         </div>
       )}

@@ -22,6 +22,8 @@ export type Settlement = {
   to_person: string;
   amount: number;
   note: string | null;
+  /** What this payment was meant to clear; larger than `amount` for a part payment. */
+  planned: number | null;
   created_at: string;
   lat: number | null;
   lng: number | null;

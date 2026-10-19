@@ -40,7 +40,7 @@ export async function GET() {
         shares: (r.shares as any[]).map((p) => ({ person_id: p.person_id, amount: Number(p.amount) })),
       }))
     );
-    const out: Settlement[] = settlements.map((s: any) => ({ ...s, amount: Number(s.amount) }));
+    const out: Settlement[] = settlements.map((s: any) => ({ ...s, amount: Number(s.amount), planned: s.planned == null ? null : Number(s.planned) }));
     return NextResponse.json({ expenses, settlements: out, rules: rules as PlanRule[] });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? "Failed to load ledger" }, { status: 500 });
