@@ -74,7 +74,7 @@ Set `SESSION_SECRET` in Vercel to any long random string (it falls back to the D
 
 - Every expense and payment records where it was entered (device GPS + a short place name from OpenStreetMap). Location is optional — deny the prompt or tap ✕ on the chip and it saves without it.
 - Expenses support one or several payers, and equal / custom-amount / percentage splits. Paise are distributed so totals always match exactly.
-- Home shows your exact position with each person. Settle shows two plans for clearing the whole group: **Fewest** (the true minimum number of payments, found by an exact subset search in `lib/split.ts`) and **Direct** (everyone pays exactly the people they owe). Both list every payment, yours first, with one-tap recording.
+- Home shows your exact position with each person. Settle shows two plans for clearing the whole group: **Fewest** (the true minimum number of payments, found by an exact subset search in `lib/split.ts`) and **Direct** (everyone pays exactly the people they owe). Both list every payment, yours first, with one-tap recording. Anyone can add a shared preference ("Kunal shouldn't be the one paying me") from the Fewest plan; it is stored in `plan_rules` and the solver reroutes for everyone, reporting how many extra payments it costs.
 - Deleting an expense removes its receipt from S3 as well.
 
 ## Project layout
@@ -84,6 +84,7 @@ app/page.tsx            device onboarding → dashboard
 app/api/ledger          GET everything (with presigned receipt links)
 app/api/expenses        POST create · DELETE /[id]
 app/api/settlements     POST record payment · DELETE
+app/api/rules           POST / DELETE shared settle preferences (plan_rules)
 app/api/upload          presigned S3 PUT
 components/             UI (Dashboard, Balances, SettlePlan, RecordPayment, Activity, AddExpense, Sheet, ui…)
 lib/split.ts            split math, balances, fewest-transfers + direct settlement plans

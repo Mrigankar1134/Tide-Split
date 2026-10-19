@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { presignView, s3Configured } from "@/lib/s3";
-import type { Expense, Settlement } from "@/lib/types";
+import type { Expense, PlanRule, Settlement } from "@/lib/types";
+import { ensureRules } from "@/lib/rules";
 import { currentUser, unauthorized } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,8 @@ export async function GET() {
   if (!currentUser()) return unauthorized();
   try {
     const sql = db();
-    const [rows, settlements] = await Promise.all([
+    await ensureRules(sql);
+    const [rows, settlements, rules] = await Promise.all([
       sql`
         select e.id, e.description, e.amount, e.category, e.created_by, e.receipt_key, e.created_at, e.lat, e.lng, e.place,
           coalesce((select json_agg(json_build_object('person_id', p.person_id, 'amount', p.amount))
@@ -19,6 +21,7 @@ export async function GET() {
                     from expense_shares s where s.expense_id = e.id), '[]'::json) as shares
         from expenses e order by e.created_at desc`,
       sql`select * from settlements order by created_at desc`,
+      sql`select * from plan_rules order by created_at`,
     ]);
 
     const canSign = s3Configured();
@@ -38,7 +41,7 @@ export async function GET() {
       }))
     );
     const out: Settlement[] = settlements.map((s: any) => ({ ...s, amount: Number(s.amount) }));
-    return NextResponse.json({ expenses, settlements: out });
+    return NextResponse.json({ expenses, settlements: out, rules: rules as PlanRule[] });
   } catch (err: any) {
     return NextResponse.json({ error: err.message ?? "Failed to load ledger" }, { status: 500 });
   }

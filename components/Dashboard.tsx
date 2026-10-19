@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import type { Ledger } from "@/lib/types";
 import { PEOPLE, person } from "@/lib/people";
-import { netBalances, pairwise, settlementPlans, inr } from "@/lib/split";
+import { avoidKey, netBalances, pairwise, settlementPlans, inr } from "@/lib/split";
 import Avatar from "./Avatar";
 import AnimatedNumber from "./AnimatedNumber";
 import Balances from "./Balances";
@@ -59,10 +59,11 @@ export default function Dashboard({ me, onLogout }: { me: string; onLogout: () =
     if (!ledger) return { mine: 0, pair: {}, plans: null, spent: 0 };
     const ex = ledger.expenses, st = ledger.settlements;
     const net = netBalances(ex, st);
+    const avoid = new Set<string>((ledger.rules ?? []).map((r) => avoidKey(r.from_person, r.to_person)));
     return {
       mine: net[me] ?? 0,
       pair: pairwise(me, ex, st),
-      plans: settlementPlans(IDS, ex, st),
+      plans: settlementPlans(IDS, ex, st, avoid),
       spent: ex.reduce((s, e) => s + e.amount, 0),
     };
   }, [ledger, me]);
@@ -125,7 +126,7 @@ export default function Dashboard({ me, onLogout }: { me: string; onLogout: () =
             <>
               <h1 className="mt-6 mb-4 font-display text-[30px] font-bold leading-none tracking-tight">{titles[tab]}</h1>
               {tab === "settle"
-                ? <SettlePlan me={me} plans={plans} loading={loading} onRecord={setPaying} />
+                ? <SettlePlan me={me} plans={plans} rules={ledger?.rules ?? []} loading={loading} onRecord={setPaying} onChanged={load} notify={notify} />
                 : <Activity me={me} ledger={ledger} onChanged={load} notify={notify} />}
             </>
           )}

@@ -28,7 +28,9 @@ export type Settlement = {
   place: string | null;
 };
 
-export type Ledger = { expenses: Expense[]; settlements: Settlement[] };
+export type PlanRule = { id: string; from_person: string; to_person: string; created_by: string; created_at: string };
+
+export type Ledger = { expenses: Expense[]; settlements: Settlement[]; rules: PlanRule[] };
 
 export type NewExpense = {
   description: string;

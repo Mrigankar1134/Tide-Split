@@ -65,49 +65,154 @@ export function simplify(net: Record<string, number>): Transfer[] {
   return chain(entries);
 }
 
+/** A pairing to steer clear of, as "from|to". Example: "kunal|mrigankar" = Kunal should not be the one paying Mrigankar. */
+export type AvoidSet = Set<string>;
+export const avoidKey = (from: string, to: string) => `${from}|${to}`;
+
+type Entry = { id: string; paise: number };
+
+/** Can the debtors in this group pay off the creditors using only allowed pairings? (bipartite max-flow) */
+function feasible(group: Entry[], avoid: AvoidSet): boolean {
+  if (avoid.size === 0) return true;
+  const debtors = group.filter((e) => e.paise < 0), creditors = group.filter((e) => e.paise > 0);
+  const need = debtors.reduce((s, d) => s - d.paise, 0);
+  return maxFlow(debtors, creditors, avoid).total === need;
+}
+
+/** Ford–Fulkerson on a tiny bipartite graph. Returns total flow and the debtor→creditor flows. */
+function maxFlow(debtors: Entry[], creditors: Entry[], avoid: AvoidSet) {
+  const D = debtors.length, C = creditors.length, S = D + C, T = S + 1, N = T + 1;
+  const cap: number[][] = Array.from({ length: N }, () => new Array(N).fill(0));
+  debtors.forEach((d, i) => { cap[S][i] = -d.paise; });
+  creditors.forEach((c, j) => { cap[D + j][T] = c.paise; });
+  for (let i = 0; i < D; i++) for (let j = 0; j < C; j++) if (!avoid.has(avoidKey(debtors[i].id, creditors[j].id))) cap[i][D + j] = 1e12;
+  let total = 0;
+  for (;;) {
+    const prev = new Array(N).fill(-1); prev[S] = S;
+    const q = [S];
+    while (q.length && prev[T] === -1) {
+      const u = q.shift()!;
+      for (let v = 0; v < N; v++) if (prev[v] === -1 && cap[u][v] > 0) { prev[v] = u; q.push(v); }
+    }
+    if (prev[T] === -1) break;
+    let f = Infinity;
+    for (let v = T; v !== S; v = prev[v]) f = Math.min(f, cap[prev[v]][v]);
+    for (let v = T; v !== S; v = prev[v]) { cap[prev[v]][v] -= f; cap[v][prev[v]] += f; }
+    total += f;
+  }
+  const flow: number[][] = Array.from({ length: D }, () => new Array(C).fill(0));
+  for (let i = 0; i < D; i++) for (let j = 0; j < C; j++) flow[i][j] = cap[D + j][i]; // reverse residual = flow sent
+  return { total, flow };
+}
+
 /**
- * The true minimum number of transfers that clears every balance.
- * Minimum = (people with a non-zero balance) − (max number of disjoint zero-sum groups).
- * Exact search over subsets — for a group of nine that is 512 states, instant.
+ * Transfers for one zero-sum group while respecting `avoid`.
+ * Starts from any feasible flow, then cancels cycles until the payment graph is a forest,
+ * which guarantees at most (people − 1) transfers — the same count the unconstrained chain gets.
  */
-export function fewestTransfers(net: Record<string, number>): Transfer[] {
-  const entries = Object.entries(net).filter(([, v]) => Math.abs(v) > EPS).map(([id, v]) => ({ id, paise: Math.round(v * 100) }));
+function chainAvoiding(group: Entry[], avoid: AvoidSet): Transfer[] {
+  if (avoid.size === 0) return chain(group);
+  const debtors = group.filter((e) => e.paise < 0), creditors = group.filter((e) => e.paise > 0);
+  const { flow } = maxFlow(debtors, creditors, avoid);
+  const D = debtors.length, C = creditors.length;
+
+  // Cycle cancelling on the undirected bipartite graph of positive flows.
+  for (;;) {
+    // adjacency: node ids 0..D-1 debtors, D..D+C-1 creditors
+    const adj: number[][] = Array.from({ length: D + C }, () => []);
+    for (let i = 0; i < D; i++) for (let j = 0; j < C; j++) if (flow[i][j] > 0) { adj[i].push(D + j); adj[D + j].push(i); }
+    const parent = new Array(D + C).fill(-2);
+    let cycle: number[] | null = null;
+    const dfs = (u: number, p: number): boolean => {
+      parent[u] = p;
+      for (const v of adj[u]) {
+        if (v === p) continue;
+        if (parent[v] !== -2) { // back edge → cycle v … u
+          const c = [u]; for (let x = u; x !== v; x = parent[x]) c.push(parent[x]);
+          cycle = c; return true;
+        }
+        if (dfs(v, u)) return true;
+      }
+      return false;
+    };
+    for (let s = 0; s < D + C && !cycle; s++) if (parent[s] === -2) dfs(s, -1);
+    if (!cycle) break;
+    const cyc: number[] = cycle;
+    // Edges of the cycle, alternating sign. Pick the parity that subtracts from the smallest edge.
+    const edges = cyc.map((u, k) => { const v = cyc[(k + 1) % cyc.length]; const [d, c] = u < D ? [u, v - D] : [v, u - D]; return { d, c }; });
+    const minOn = (parity: number) => Math.min(...edges.filter((_, k) => k % 2 === parity).map((e) => flow[e.d][e.c]));
+    const parity = minOn(0) <= minOn(1) ? 0 : 1;
+    const delta = minOn(parity);
+    edges.forEach((e, k) => { flow[e.d][e.c] += k % 2 === parity ? -delta : delta; });
+  }
+
+  const out: Transfer[] = [];
+  for (let i = 0; i < D; i++) for (let j = 0; j < C; j++) if (flow[i][j] > 0) out.push({ from: debtors[i].id, to: creditors[j].id, amount: flow[i][j] / 100 });
+  return out;
+}
+
+export type FewestResult = {
+  transfers: Transfer[];
+  /** Fewest transfers possible with no preferences at all. */
+  minimum: number;
+  /** False when the avoid-set cannot be honoured (e.g. the avoided person is the only one who can pay you); transfers then ignore it. */
+  honored: boolean;
+};
+
+/**
+ * The true minimum number of transfers that clears every balance, optionally steering clear of
+ * some pairings. Minimum = (people with a non-zero balance) − (max number of disjoint zero-sum groups),
+ * where a group only counts if it can be settled with allowed pairings. Exact search over subsets —
+ * for a group of nine that is at most 3^9 ≈ 20k steps, instant.
+ */
+export function fewestTransfersWith(net: Record<string, number>, avoid: AvoidSet = new Set()): FewestResult {
+  const entries: Entry[] = Object.entries(net).filter(([, v]) => Math.abs(v) > EPS).map(([id, v]) => ({ id, paise: Math.round(v * 100) }));
   const n = entries.length;
-  if (n === 0) return [];
-  if (n > 16) return chain(entries); // never for this app, but stay safe
+  if (n === 0) return { transfers: [], minimum: 0, honored: true };
+  if (n > 14) { const t = chain(entries); return { transfers: t, minimum: t.length, honored: avoid.size === 0 }; }
 
   const full = (1 << n) - 1;
   const sum = new Int32Array(1 << n);
-  for (let m = 1; m <= full; m++) {
-    const low = m & -m, i = 31 - Math.clz32(low);
-    sum[m] = sum[m ^ low] + entries[i].paise;
-  }
-  // dp[m] = max zero-sum groups obtainable from the people in m; via[m] = which person was removed last.
-  const dp = new Int8Array(1 << n), via = new Int8Array(1 << n).fill(-1);
-  for (let m = 1; m <= full; m++) {
-    let best = -1, arg = -1;
-    for (let i = 0; i < n; i++) {
-      if (!(m & (1 << i))) continue;
-      const d = dp[m ^ (1 << i)];
-      if (d > best) { best = d; arg = i; }
+  for (let m = 1; m <= full; m++) { const low = m & -m, i = 31 - Math.clz32(low); sum[m] = sum[m ^ low] + entries[i].paise; }
+  const members = (m: number) => entries.filter((_, i) => m & (1 << i));
+
+  const solve = (av: AvoidSet) => {
+    const ok = new Int8Array(1 << n); // -1 unknown, 0 no, 1 yes
+    const valid = (g: number) => {
+      if (sum[g] !== 0) return false;
+      if (ok[g] === 0) ok[g] = feasible(members(g), av) ? 1 : 2;
+      return ok[g] === 1;
+    };
+    // dp[m] = max number of valid groups partitioning m exactly; -1 = impossible.
+    const dp = new Int8Array(1 << n).fill(-1), pick = new Int32Array(1 << n);
+    dp[0] = 0;
+    for (let m = 1; m <= full; m++) {
+      const low = m & -m, rest = m ^ low;
+      let best = -1, arg = 0;
+      // every submask g of m that contains `low`
+      for (let sub = rest; ; sub = (sub - 1) & rest) {
+        const g = sub | low;
+        if (dp[m ^ g] >= 0 && valid(g)) { const c = dp[m ^ g] + 1; if (c > best) { best = c; arg = g; } }
+        if (sub === 0) break;
+      }
+      dp[m] = best; pick[m] = arg;
     }
-    dp[m] = best + (sum[m] === 0 ? 1 : 0);
-    via[m] = arg;
-  }
+    if (dp[full] < 0) return null;
+    const groups: Entry[][] = [];
+    for (let m = full; m; m ^= pick[m]) groups.push(members(pick[m]));
+    return groups;
+  };
 
-  // Walk back from the full set; every time we pass a zero-sum mask a group closes.
-  const groups: { id: string; paise: number }[][] = [];
-  let m = full, current: { id: string; paise: number }[] = [];
-  while (m) {
-    if (sum[m] === 0 && current.length) { groups.push(current); current = []; }
-    const i = via[m];
-    current.push(entries[i]);
-    m ^= 1 << i;
-  }
-  if (current.length) groups.push(current);
-
-  return groups.flatMap(chain).sort((a, b) => b.amount - a.amount);
+  const free = solve(new Set())!; // always solvable: the full set is zero-sum
+  const minimum = n - free.length;
+  if (avoid.size === 0) return { transfers: free.flatMap(chain).sort((a, b) => b.amount - a.amount), minimum, honored: true };
+  const constrained = solve(avoid);
+  if (!constrained) return { transfers: free.flatMap(chain).sort((a, b) => b.amount - a.amount), minimum, honored: false };
+  return { transfers: constrained.flatMap((g) => chainAvoiding(g, avoid)).sort((a, b) => b.amount - a.amount), minimum, honored: true };
 }
+
+/** Fewest transfers with no preferences. */
+export const fewestTransfers = (net: Record<string, number>): Transfer[] => fewestTransfersWith(net).transfers;
 
 /**
  * Direct settlement: each person pays exactly the people they actually owe, pair by pair.
@@ -130,13 +235,22 @@ export function directTransfers(ids: string[], expenses: Expense[], settlements:
 }
 
 export type PlanId = "fewest" | "direct";
-export type Plan = { id: PlanId; transfers: Transfer[]; count: number; volume: number };
+export type Plan = {
+  id: PlanId;
+  transfers: Transfer[];
+  count: number;
+  volume: number;
+  /** Fewest plan only: the count with no preferences, and whether the preferences could be honoured. */
+  minimum?: number;
+  honored?: boolean;
+};
 
 /** Both settlement plans side by side, so the UI can show what the fewest-transfers plan saves. */
-export function settlementPlans(ids: string[], expenses: Expense[], settlements: Settlement[]): Record<PlanId, Plan> {
+export function settlementPlans(ids: string[], expenses: Expense[], settlements: Settlement[], avoid: AvoidSet = new Set()): Record<PlanId, Plan> {
   const net = netBalances(expenses, settlements);
   const mk = (id: PlanId, transfers: Transfer[]): Plan => ({ id, transfers, count: transfers.length, volume: round2(transfers.reduce((s, t) => s + t.amount, 0)) });
-  return { fewest: mk("fewest", fewestTransfers(net)), direct: mk("direct", directTransfers(ids, expenses, settlements)) };
+  const f = fewestTransfersWith(net, avoid);
+  return { fewest: { ...mk("fewest", f.transfers), minimum: f.minimum, honored: f.honored }, direct: mk("direct", directTransfers(ids, expenses, settlements)) };
 }
 
 /** Exact pairwise ledger for `me`: what each person owes me (+) or I owe them (−). */

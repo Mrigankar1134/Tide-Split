@@ -60,3 +60,14 @@ insert into pins (person_id, pin_hash) values
   ('bhanu', 'b06b1b9f3a5a7479caa4d034e7c70cdc35415936533b76241338767a8ba1aa5d'),
   ('abhishek', 'c1b00f5debea58d8b1bad8311e3678876cb83400af4a5a8f0271a20c0a3bb8b2')
 on conflict (person_id) do nothing;
+
+-- Settlement preferences shared by the whole group: "from_person should not be the one paying to_person"
+-- in the fewest-payments plan. The app also creates this table on first use.
+create table if not exists plan_rules (
+  id uuid primary key default gen_random_uuid(),
+  from_person text not null,
+  to_person text not null,
+  created_by text not null,
+  created_at timestamptz not null default now(),
+  unique (from_person, to_person)
+);
