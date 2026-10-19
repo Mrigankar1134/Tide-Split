@@ -184,10 +184,17 @@ export default function SettlePlan({ me, plans, rules, loading, onRecord, onChan
         <section>
           <SectionTitle aside="shared with everyone">Preferences</SectionTitle>
           <div className="card-flat overflow-hidden rounded-card">
-            {fewest.honored === false && (
-              <p className="border-b border-white/[0.07] px-4 py-3 text-[13px] leading-snug text-amber">
-                Can't honour these right now — someone marked as avoided is the only person who can make that payment. The plan ignores them until balances change.
-              </p>
+            {fewest.honored === false && (fewest.forced ?? []).length > 0 && (
+              <div className="space-y-1.5 border-b border-white/[0.07] px-4 py-3 text-[13px] leading-snug text-amber">
+                {(fewest.forced ?? []).map((t) => {
+                  const payer = t.from === me ? "You" : person(t.from).short, payee = t.to === me ? "you" : person(t.to).short;
+                  return (
+                    <p key={`${t.from}-${t.to}`}>
+                      {payer} {t.from === me ? "owe" : "owes"} more than everyone else is owed combined, so <span className="money font-semibold">{inr(t.amount)}</span> still has to go to {payee}. The rest of {t.from === me ? "your" : "their"} payments are routed elsewhere.
+                    </p>
+                  );
+                })}
+              </div>
             )}
             {rules.length === 0 ? (
               <p className="px-4 pt-3.5 text-[13.5px] leading-snug text-white/55">
