@@ -126,7 +126,7 @@ export default function Dashboard({ me, onLogout }: { me: string; onLogout: () =
             <>
               <h1 className="mt-6 mb-4 font-display text-[30px] font-bold leading-none tracking-tight">{titles[tab]}</h1>
               {tab === "settle"
-                ? <SettlePlan me={me} plans={plans} rules={ledger?.rules ?? []} loading={loading} onRecord={setPaying} onChanged={load} notify={notify} />
+                ? <SettlePlan me={me} plans={plans} loading={loading} onRecord={setPaying} />
                 : <Activity me={me} ledger={ledger} onChanged={load} notify={notify} />}
             </>
           )}

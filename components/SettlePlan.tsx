@@ -3,10 +3,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { person } from "@/lib/people";
 import { inr, type Plan, type PlanId, type Transfer } from "@/lib/split";
-import type { PlanRule } from "@/lib/types";
-import type { Toast } from "./Dashboard";
 import Avatar from "./Avatar";
-import PreferenceSheet from "./PreferenceSheet";
 import { Empty, Segmented, SectionTitle, Skeleton } from "./ui";
 
 export type PaymentTarget = { from: string; to: string; amount: number };
@@ -14,11 +11,8 @@ export type PaymentTarget = { from: string; to: string; amount: number };
 type Props = {
   me: string;
   plans: Record<PlanId, Plan> | null;
-  rules: PlanRule[];
   loading: boolean;
   onRecord: (t: PaymentTarget) => void;
-  onChanged: () => void;
-  notify: (t: Toast) => void;
 };
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -30,7 +24,7 @@ const Pair = ({ from, to, size = 34 }: { from: string; to: string; size?: number
   </div>
 );
 
-function TransferRow({ t, me, index, onRecord, onAvoid }: { t: Transfer; me: string; index: number; onRecord?: (t: PaymentTarget) => void; onAvoid?: (t: Transfer) => void }) {
+function TransferRow({ t, me, index, onRecord }: { t: Transfer; me: string; index: number; onRecord?: (t: PaymentTarget) => void }) {
   const iPay = t.from === me, iGet = t.to === me, mine = iPay || iGet;
   return (
     <motion.li
@@ -48,28 +42,19 @@ function TransferRow({ t, me, index, onRecord, onAvoid }: { t: Transfer; me: str
         </p>
         <span className={`money shrink-0 text-[16px] font-semibold ${iPay ? "text-coral" : iGet ? "text-mint" : "text-white/85"}`}>{inr(t.amount)}</span>
       </div>
-      {mine && (onRecord || onAvoid) && (
+      {mine && onRecord && (
         <div className="mt-2.5 flex gap-2 pl-[52px]">
-          {onRecord && (
-            <button onClick={() => onRecord(t)} className="btn-ghost whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-medium text-tide">
-              {iPay ? "Mark as paid" : "Mark as received"}
-            </button>
-          )}
-          {onAvoid && (
-            <button onClick={() => onAvoid(t)} className="btn-ghost whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-medium text-white/70">
-              {iPay ? `Not to ${person(t.to).short}` : `Not from ${person(t.from).short}`}
-            </button>
-          )}
+          <button onClick={() => onRecord(t)} className="btn-ghost whitespace-nowrap rounded-full px-3 py-1.5 text-[12.5px] font-medium text-tide">
+            {iPay ? "Mark as paid" : "Mark as received"}
+          </button>
         </div>
       )}
     </motion.li>
   );
 }
 
-export default function SettlePlan({ me, plans, rules, loading, onRecord, onChanged, notify }: Props) {
+export default function SettlePlan({ me, plans, loading, onRecord }: Props) {
   const [planId, setPlanId] = useState<PlanId>("fewest");
-  const [busy, setBusy] = useState(false);
-  const [adding, setAdding] = useState(false);
 
   if (loading || !plans) return <Skeleton rows={4} height={64} />;
 
@@ -81,30 +66,6 @@ export default function SettlePlan({ me, plans, rules, loading, onRecord, onChan
   const others = plan.transfers.filter((t) => t.from !== me && t.to !== me);
   const iPayTotal = mine.filter((t) => t.from === me).reduce((s, t) => s + t.amount, 0);
   const iGetTotal = mine.filter((t) => t.to === me).reduce((s, t) => s + t.amount, 0);
-
-  const addRule = async (from: string, to: string) => {
-    setBusy(true);
-    try {
-      const r = await fetch("/api/rules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ from_person: from, to_person: to }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error ?? `Couldn't save (HTTP ${r.status})`);
-      setAdding(false);
-      notify({ text: `Saved — ${from === me ? "you" : person(from).short} won't be routed to ${to === me ? "you" : person(to).short}` });
-      onChanged();
-    } catch (e: any) { notify({ text: e.message ?? "Couldn't save the preference", kind: "error" }); }
-    finally { setBusy(false); }
-  };
-  const removeRule = async (id: string) => {
-    setBusy(true);
-    try {
-      const r = await fetch("/api/rules", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error ?? `Couldn't remove (HTTP ${r.status})`);
-      notify({ text: "Preference removed" });
-      onChanged();
-    } catch (e: any) { notify({ text: e.message ?? "Couldn't remove it", kind: "error" }); }
-    finally { setBusy(false); }
-  };
 
   if (fewest.count === 0)
     return <Empty glyph="🌊" title="All settled" body="Nobody owes anyone right now. Add an expense and the plan appears here." />;
@@ -133,7 +94,7 @@ export default function SettlePlan({ me, plans, rules, loading, onRecord, onChan
                   {saved > 0
                     ? `Paying everyone directly would take ${plural(direct.count, "payment")} — this plan removes ${saved}. Some people end up paying someone they never split a bill with, and that is fine: everyone's balance still lands on zero.`
                     : "That is already as few as it can be — every payment here goes to someone you actually owe."}
-                  {extra > 0 && ` ${plural(extra, "payment")} more than the bare minimum, because of the preferences below.`}
+                  
                 </p>
               </>
             ) : (
@@ -171,59 +132,12 @@ export default function SettlePlan({ me, plans, rules, loading, onRecord, onChan
           <motion.ul layout className="card divide-y divide-white/[0.07] overflow-hidden rounded-card">
             <AnimatePresence initial={false}>
               {mine.map((t, i) => (
-                <TransferRow key={`${planId}-${t.from}-${t.to}`} t={t} me={me} index={i} onRecord={onRecord}
-                  onAvoid={planId === "fewest" && !busy ? (x) => addRule(x.from, x.to) : undefined} />
+                <TransferRow key={`${planId}-${t.from}-${t.to}`} t={t} me={me} index={i} onRecord={onRecord} />
               ))}
             </AnimatePresence>
           </motion.ul>
         )}
       </section>
-
-      {/* Shared preferences — only meaningful for the fewest plan */}
-      {planId === "fewest" && (
-        <section>
-          <SectionTitle aside="shared with everyone">Preferences</SectionTitle>
-          <div className="card-flat overflow-hidden rounded-card">
-            {fewest.honored === false && (fewest.forced ?? []).length > 0 && (
-              <div className="space-y-1.5 border-b border-white/[0.07] px-4 py-3 text-[13px] leading-snug text-amber">
-                {(fewest.forced ?? []).map((t) => {
-                  const payer = t.from === me ? "You" : person(t.from).short, payee = t.to === me ? "you" : person(t.to).short;
-                  return (
-                    <p key={`${t.from}-${t.to}`}>
-                      {payer} {t.from === me ? "owe" : "owes"} more than everyone else is owed combined, so <span className="money font-semibold">{inr(t.amount)}</span> still has to go to {payee}. The rest of {t.from === me ? "your" : "their"} payments are routed elsewhere.
-                    </p>
-                  );
-                })}
-              </div>
-            )}
-            {rules.length === 0 ? (
-              <p className="px-4 pt-3.5 text-[13.5px] leading-snug text-white/55">
-                None yet. If you'd rather not deal with someone, add a preference and the plan reroutes around them for everyone.
-              </p>
-            ) : (
-              <ul className="divide-y divide-white/[0.07]">
-                {rules.map((r) => {
-                  const canRemove = r.from_person === me || r.to_person === me;
-                  return (
-                    <li key={r.id} className="flex items-center gap-3 px-4 py-3">
-                      <Pair from={r.from_person} to={r.to_person} size={28} />
-                      <p className="min-w-0 flex-1 truncate text-[14px]">
-                        <span className="font-medium">{r.from_person === me ? "You" : person(r.from_person).short}</span>
-                        <span className="text-white/50"> {r.from_person === me ? "don't pay" : "doesn't pay"} </span>
-                        <span className="font-medium">{r.to_person === me ? "you" : person(r.to_person).short}</span>
-                      </p>
-                      {canRemove && <button disabled={busy} onClick={() => removeRule(r.id)} className="btn-ghost shrink-0 rounded-full px-3 py-1.5 text-[12.5px]">Remove</button>}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            <div className="px-4 pb-3.5 pt-3">
-              <button onClick={() => setAdding(true)} disabled={busy} className="btn-ghost w-full rounded-full py-2.5 text-[13.5px] font-medium">Add a preference</button>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* Everyone else */}
       {others.length > 0 && (
@@ -241,7 +155,6 @@ export default function SettlePlan({ me, plans, rules, loading, onRecord, onChan
         Plans are worked out live from the ledger. Recording a payment updates balances for everyone; nothing is settled until it is recorded.
       </p>
 
-      <PreferenceSheet me={me} open={adding} rules={rules} busy={busy} onClose={() => setAdding(false)} onAdd={addRule} />
     </div>
   );
 }
