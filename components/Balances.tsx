@@ -1,74 +1,92 @@
 "use client";
-import { motion } from "framer-motion";
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { person } from "@/lib/people";
-import { inr } from "@/lib/split";
+import { inr, type Plan } from "@/lib/split";
 import Avatar from "./Avatar";
-import type { PaymentTarget } from "./SettlePlan";
+import { TransferRow, type PaymentTarget } from "./SettlePlan";
 import { Empty, SectionTitle, Skeleton } from "./ui";
 
 type Props = {
   me: string;
-  pair: Record<string, number>;   // + they owe me, − I owe them
+  pair: Record<string, number>;   // one-to-one: + they owe me, − I owe them
+  plan: Plan | null;              // the group's fewest-payments plan
   loading: boolean;
   onRecord: (t: PaymentTarget) => void;
   onGoSettle: () => void;
 };
 
-export default function Balances({ me, pair, loading, onRecord, onGoSettle }: Props) {
-  if (loading) return <Skeleton rows={3} />;
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+export default function Balances({ me, pair, plan, loading, onRecord, onGoSettle }: Props) {
+  const [showDirect, setShowDirect] = useState(false);
+  if (loading || !plan) return <Skeleton rows={3} />;
+
+  const mine = plan.transfers.filter((t) => t.from === me || t.to === me);
+  const pins = plan.pins ?? [];
   const rows = Object.entries(pair).filter(([, v]) => Math.abs(v) > 0.004).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-  if (rows.length === 0)
-    return <Empty glyph="🌊" title="Nothing owed either way" body="Add an expense and your balance with each person shows up here." />;
+  const iPayTotal = mine.filter((t) => t.from === me).reduce((s, t) => s + t.amount, 0);
+  const iGetTotal = mine.filter((t) => t.to === me).reduce((s, t) => s + t.amount, 0);
 
-  const owedToMe = rows.filter(([, v]) => v > 0), iOwe = rows.filter(([, v]) => v < 0);
-
-  const Row = ({ id, v, i }: { id: string; v: number; i: number }) => {
-    const theyOwe = v > 0;
-    return (
-      <motion.li key={id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 + i * 0.035, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-        className="flex items-center gap-3 px-4 py-3">
-        <Avatar id={id} size={42} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-medium leading-tight">{person(id).name}</p>
-          <p className={`money mt-0.5 text-[13.5px] ${theyOwe ? "text-mint" : "text-coral"}`}>
-            {theyOwe ? "owes you" : "you owe"} <span className="font-semibold">{inr(Math.abs(v))}</span>
-          </p>
-        </div>
-        <button
-          onClick={() => onRecord(theyOwe ? { from: id, to: me, amount: Math.abs(v) } : { from: me, to: id, amount: Math.abs(v) })}
-          className="btn-ghost whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-medium">
-          {theyOwe ? "Got paid" : "Pay"}
-        </button>
-      </motion.li>
-    );
-  };
+  if (mine.length === 0 && rows.length === 0)
+    return <Empty glyph="🌊" title="Nothing owed either way" body="Add an expense and your payments show up here." />;
 
   return (
     <div className="space-y-5">
-      {iOwe.length > 0 && (
-        <section>
-          <SectionTitle aside={<span className="money">{inr(iOwe.reduce((s, [, v]) => s - v, 0))}</span>}>You owe</SectionTitle>
+      {/* What to actually do — same rows as the Settle tab */}
+      <section>
+        <SectionTitle aside={mine.length ? (
+          <>
+            {iPayTotal > 0 && <span className="money text-coral">−{inr(iPayTotal)}</span>}
+            {iPayTotal > 0 && iGetTotal > 0 && " / "}
+            {iGetTotal > 0 && <span className="money text-mint">+{inr(iGetTotal)}</span>}
+          </>
+        ) : undefined}>
+          Your payments
+        </SectionTitle>
+        {mine.length === 0 ? (
+          <div className="card-flat rounded-row px-4 py-3.5 text-[14px] text-white/55">Nothing for you to pay or collect — the rest of the group settles among themselves.</div>
+        ) : (
           <ul className="card divide-y divide-white/[0.07] overflow-hidden rounded-card">
-            {iOwe.map(([id, v], i) => <Row key={id} id={id} v={v} i={i} />)}
+            {mine.map((t, i) => <TransferRow key={`${t.from}-${t.to}`} t={t} me={me} index={i} onRecord={onRecord} pin={pins.find((p) => p.from === t.from && p.to === t.to)} />)}
           </ul>
+        )}
+        <button onClick={onGoSettle} className="mt-2 px-1 text-[12.5px] text-white/45 underline-offset-2 active:underline">
+          Part of the group plan: {plural(plan.count, "payment")} clears everyone ›
+        </button>
+      </section>
+
+      {/* One-to-one ledger — context, not instructions */}
+      {rows.length > 0 && (
+        <section>
+          <button onClick={() => setShowDirect((v) => !v)} className="flex w-full items-center justify-between px-1 py-1 text-left" aria-expanded={showDirect}>
+            <span className="font-display text-[15px] font-semibold tracking-tight text-white/85">One-to-one balances</span>
+            <span className="text-[12.5px] text-white/45">{showDirect ? "Hide" : `Show ${rows.length}`}</span>
+          </button>
+          <p className="mt-0.5 px-1 text-[12.5px] leading-snug text-white/45">
+            What you and each person owe each other from shared bills alone. The plan above settles the same totals in fewer payments, so a name can appear differently in each.
+          </p>
+          <AnimatePresence initial={false}>
+            {showDirect && (
+              <motion.ul initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.22 }}
+                className="card-flat mt-2.5 divide-y divide-white/[0.06] overflow-hidden rounded-card">
+                {rows.map(([id, v]) => {
+                  const theyOwe = v > 0;
+                  return (
+                    <li key={id} className="flex items-center gap-3 px-4 py-3">
+                      <Avatar id={id} size={36} />
+                      <p className="min-w-0 flex-1 truncate text-[14.5px] leading-tight">{person(id).name}</p>
+                      <p className={`money text-[14px] ${theyOwe ? "text-mint" : "text-coral"}`}>
+                        <span className="text-white/45">{theyOwe ? "owes you " : "you owe "}</span><span className="font-semibold">{inr(Math.abs(v))}</span>
+                      </p>
+                    </li>
+                  );
+                })}
+              </motion.ul>
+            )}
+          </AnimatePresence>
         </section>
       )}
-      {owedToMe.length > 0 && (
-        <section>
-          <SectionTitle aside={<span className="money">{inr(owedToMe.reduce((s, [, v]) => s + v, 0))}</span>}>Owed to you</SectionTitle>
-          <ul className="card divide-y divide-white/[0.07] overflow-hidden rounded-card">
-            {owedToMe.map(([id, v], i) => <Row key={id} id={id} v={v} i={i + iOwe.length} />)}
-          </ul>
-        </section>
-      )}
-      <button onClick={onGoSettle} className="card-flat flex w-full items-center justify-between rounded-row px-4 py-3.5 text-left">
-        <span>
-          <span className="block text-[14.5px] font-medium">Settle the whole group</span>
-          <span className="block text-[12.5px] text-white/50">See the fewest payments that clear everyone</span>
-        </span>
-        <span className="text-white/40">›</span>
-      </button>
     </div>
   );
 }

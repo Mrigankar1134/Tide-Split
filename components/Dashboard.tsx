@@ -119,7 +119,7 @@ export default function Dashboard({ me, onLogout }: { me: string; onLogout: () =
               )}
 
               <div className="mt-5">
-                <Balances me={me} pair={pair} loading={loading} onRecord={setPaying} onGoSettle={() => setTab("settle")} />
+                <Balances me={me} pair={pair} plan={plans?.fewest ?? null} loading={loading} onRecord={setPaying} onGoSettle={() => setTab("settle")} />
               </div>
             </>
           ) : (

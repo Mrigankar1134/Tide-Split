@@ -24,7 +24,7 @@ const Pair = ({ from, to, size = 34 }: { from: string; to: string; size?: number
   </div>
 );
 
-function TransferRow({ t, me, index, onRecord, pin }: { t: Transfer; me: string; index: number; onRecord?: (t: PaymentTarget) => void; pin?: Pin }) {
+export function TransferRow({ t, me, index, onRecord, pin }: { t: Transfer; me: string; index: number; onRecord?: (t: PaymentTarget) => void; pin?: Pin }) {
   const iPay = t.from === me, iGet = t.to === me, mine = iPay || iGet;
   const pct = pin ? Math.min(100, Math.round((pin.paid / pin.planned) * 100)) : 0;
   return (
